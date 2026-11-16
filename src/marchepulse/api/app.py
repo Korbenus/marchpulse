@@ -198,6 +198,11 @@ def create_app(
 
     @app.post("/v1/trial", response_model=ApiKeyIssuedResponse, status_code=201, tags=["Account"])
     def signup_free_trial(payload: TrialSignupRequest) -> ApiKeyIssuedResponse:
+        if not cfg.direct_billing_enabled:
+            raise HTTPException(
+                status_code=403,
+                detail="Direct trial signup is disabled; access the API via RapidAPI.",
+            )
         clean_email = payload.email.strip().lower()
         if "@" not in clean_email or "." not in clean_email.split("@", 1)[-1]:
             raise HTTPException(status_code=422, detail="Adresse email invalide.")

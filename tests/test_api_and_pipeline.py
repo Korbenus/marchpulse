@@ -77,6 +77,8 @@ def test_full_api_and_autonomous_pipeline_flow(tmp_path: Path) -> None:
         email_from="MarchePulse <alerts@example.com>",
         boamp_fetch_limit=20,
         enrich_max_per_run=5,
+        rapidapi_listing_url="https://rapidapi.com/demo/api/marchepulse",
+        direct_billing_enabled=False,
     )
     db = Database(settings.db_path)
     boamp = BoampClient(transport=httpx.MockTransport(boamp_handler))
@@ -95,9 +97,12 @@ def test_full_api_and_autonomous_pipeline_flow(tmp_path: Path) -> None:
     )
     client = TestClient(app)
 
-    # 1. Landing & Health
+    # 1. Landing & Health (Solution A: RapidAPI-first, no direct prices)
     assert client.get("/health").status_code == 200
-    assert "MarchePulse" in client.get("/").text
+    landing_html = client.get("/").text
+    assert "MarchePulse" in landing_html
+    assert "https://rapidapi.com/demo/api/marchepulse" in landing_html
+    assert "19 EUR" not in landing_html
 
     # 2. Admin issues a key
     key_resp = client.post(
@@ -187,17 +192,44 @@ def test_full_api_and_autonomous_pipeline_flow(tmp_path: Path) -> None:
     assert robots_resp.status_code == 200
     assert "Sitemap: http://testserver/sitemap.xml" in robots_resp.text
 
-    # 8. Self-service free trial signup (with duplicate protection)
-    trial_ok = client.post("/v1/trial", json={"email": "prospect@pme.fr"})
+    # 8. Direct trial signup disabled in RapidAPI-only mode, enabled when flag is True
+    assert client.post("/v1/trial", json={"email": "prospect@pme.fr"}).status_code == 403
+
+    direct_app = create_app(
+        settings=Settings(
+            env="test",
+            log_level="INFO",
+            base_url="http://testserver",
+            db_path=tmp_path / "app.db",
+            feed_dir=tmp_path / "feed",
+            admin_secret="super-admin-secret",
+            rapidapi_proxy_secret="",
+            lemonsqueezy_webhook_secret="ls-sec",
+            lemonsqueezy_checkout_url="",
+            stripe_webhook_secret="st-sec",
+            stripe_checkout_url="",
+            resend_api_key="",
+            email_from="MarchePulse <alerts@example.com>",
+            boamp_fetch_limit=20,
+            enrich_max_per_run=5,
+            direct_billing_enabled=True,
+        ),
+        db=db,
+        boamp_client=boamp,
+        entreprises_client=entreprises,
+        notifier=notifier,
+    )
+    direct_client = TestClient(direct_app)
+    trial_ok = direct_client.post("/v1/trial", json={"email": "prospect@pme.fr"})
     assert trial_ok.status_code == 201
     trial_key = trial_ok.json()["api_key"]
     assert trial_key.startswith("mp_live_")
-    assert client.get("/v1/tenders", headers={"X-API-Key": trial_key}).status_code == 200
+    assert direct_client.get("/v1/tenders", headers={"X-API-Key": trial_key}).status_code == 200
 
-    trial_dup = client.post("/v1/trial", json={"email": "PROSPECT@pme.fr"})
+    trial_dup = direct_client.post("/v1/trial", json={"email": "PROSPECT@pme.fr"})
     assert trial_dup.status_code == 409
 
-    trial_bad = client.post("/v1/trial", json={"email": "invalid-email"})
+    trial_bad = direct_client.post("/v1/trial", json={"email": "invalid-email"})
     assert trial_bad.status_code == 422
 
     # 9. Delete alert subscription

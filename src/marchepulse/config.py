@@ -45,6 +45,8 @@ class Settings:
     boamp_fetch_limit: int
     enrich_max_per_run: int
     database_url: str = ""
+    rapidapi_listing_url: str = ""
+    direct_billing_enabled: bool = False
 
 
 def configure_logging(level_name: str = "INFO") -> None:
@@ -77,4 +79,7 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         boamp_fetch_limit=max(1, min(100, int(os.getenv("MP_BOAMP_FETCH_LIMIT", "50")))),
         enrich_max_per_run=max(0, min(100, int(os.getenv("MP_ENRICH_MAX_PER_RUN", "15")))),
         database_url=os.getenv("MP_DATABASE_URL", "").strip(),
+        rapidapi_listing_url=os.getenv("MP_RAPIDAPI_LISTING_URL", "").strip(),
+        direct_billing_enabled=os.getenv("MP_DIRECT_BILLING_ENABLED", "false").strip().lower()
+        in {"1", "true", "yes"},
     )

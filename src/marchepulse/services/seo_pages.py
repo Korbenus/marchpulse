@@ -54,44 +54,44 @@ def _layout(title: str, description: str, body_html: str) -> str:
       <a href="/docs">Documentation API</a> ·
       <a href="/feed.xml">Flux RSS</a> ·
       <a href="/sitemap.xml">Sitemap</a>
-      <br />Sources officielles ouvertes : BOAMP (DILA) &amp; API Recherche d'entreprises (DINUM).
+      <br />Donnees publiques sous Licence Ouverte Etalab 2.0 : BOAMP (DILA) &amp; API Recherche d'entreprises (DINUM / INSEE).
     </footer>
   </main>
 </body>
 </html>"""
 
 
+def _primary_api_cta(settings: Settings) -> tuple[str, str]:
+    if settings.direct_billing_enabled:
+        url = (
+            settings.lemonsqueezy_checkout_url
+            or settings.stripe_checkout_url
+            or "/docs"
+        )
+        return url, "Passer a l'offre Pro"
+    if settings.rapidapi_listing_url:
+        return settings.rapidapi_listing_url, "Acceder a l'API sur RapidAPI"
+    return "/docs", "Explorer la specification OpenAPI"
+
+
 def render_landing_html(
     settings: Settings, cached_tenders: int, active_departments: list[str]
 ) -> str:
-    """Render the main B2B landing page with self-service free trial signup."""
-    checkout_url = (
-        settings.lemonsqueezy_checkout_url
-        or settings.stripe_checkout_url
-        or "/docs"
-    )
+    """Render the public API/Open-Data landing page (RapidAPI-only or direct billing)."""
+    cta_url, cta_label = _primary_api_cta(settings)
     dept_links = "".join(
         f'<a class="badge" href="/marches/departement/{html.escape(d)}">Dept. {html.escape(d)}</a>'
         for d in active_departments[:12]
     )
     dept_section = (
-        f'<p style="margin-top:1.5rem">Veille par departement : {dept_links}</p>'
+        f'<p style="margin-top:1.5rem">Exploration par departement : {dept_links}</p>'
         if dept_links
         else ""
     )
 
-    body = f"""
-    <h1>MarchePulse</h1>
-    <p class="lead">
-      API REST normalisee &amp; alertes automatisees sur les appels d'offres publics francais (BOAMP + enrichissement SIREN officiel).
-      Actuellement <strong>{cached_tenders}</strong> avis indexes.
-    </p>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="{html.escape(checkout_url)}">Passer a l'offre Pro</a>
-      <a class="btn btn-secondary" href="/marches">Parcourir les marches publics</a>
-      <a class="btn btn-secondary" href="/docs">Documentation OpenAPI</a>
-    </div>
-
+    commercial_blocks = ""
+    if settings.direct_billing_enabled:
+        commercial_blocks = """
     <section class="trial-box">
       <h2 style="margin:0 0 .35rem; font-size:1.2rem;">Tester gratuitement maintenant (100 requetes/mois)</h2>
       <p style="margin:0; color:var(--muted); font-size:.95rem;">
@@ -121,26 +121,25 @@ def render_landing_html(
         <p>250 000 requetes/mois pour CRM, ESN, cabinets de conseil et plateformes SaaS.</p>
       </article>
     </section>
-    {dept_section}
     <script>
       const form = document.getElementById('trial-form');
       const resultBox = document.getElementById('trial-result');
-      form.addEventListener('submit', async (e) => {{
+      form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const email = document.getElementById('trial-email').value.trim();
         resultBox.textContent = 'Creation de la cle en cours...';
-        try {{
-          const resp = await fetch('/v1/trial', {{
+        try {
+          const resp = await fetch('/v1/trial', {
             method: 'POST',
-            headers: {{ 'Content-Type': 'application/json' }},
-            body: JSON.stringify({{ email }})
-          }});
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+          });
           const data = await resp.json();
-          if (!resp.ok) {{
+          if (!resp.ok) {
             resultBox.textContent = data.detail || 'Erreur';
             resultBox.style.color = '#f87171';
             return;
-          }}
+          }
           resultBox.innerHTML = '';
           resultBox.style.color = '';
           const okMsg = document.createElement('p');
@@ -155,15 +154,47 @@ def render_landing_html(
           codeCurl.textContent = 'curl -H "X-API-Key: ' + data.api_key + '" ' + window.location.origin + '/v1/tenders?only_open=true';
           preCurl.appendChild(codeCurl);
           resultBox.append(okMsg, preKey, preCurl);
-        }} catch (err) {{
+        } catch (err) {
           resultBox.textContent = 'Erreur reseau lors de la creation.';
-        }}
-      }});
+        }
+      });
     </script>
+        """
+    else:
+        commercial_blocks = """
+    <section class="grid">
+      <article class="card">
+        <h3>Donnees BOAMP normalisees</h3>
+        <p>Filtrage par departement, mots-cles, type de marche (SERVICES, FOURNITURES, TRAVAUX) et calcul automatique du delai restant.</p>
+      </article>
+      <article class="card">
+        <h3>Enrichissement SIREN officiel</h3>
+        <p>Qualification automatique de l'acheteur public via l'API Recherche d'entreprises (DINUM / INSEE).</p>
+      </article>
+      <article class="card">
+        <h3>Alertes Webhook &amp; RSS</h3>
+        <p>Abonnements multi-criteres automatises via API ou flux public RSS/JSON.</p>
+      </article>
+    </section>
+        """
+
+    body = f"""
+    <h1>MarchePulse API</h1>
+    <p class="lead">
+      API REST normalisee sur les appels d'offres publics francais (BOAMP + enrichissement SIREN officiel).
+      Actuellement <strong>{cached_tenders}</strong> avis indexes.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="{html.escape(cta_url)}">{html.escape(cta_label)}</a>
+      <a class="btn btn-secondary" href="/marches">Parcourir les avis publics</a>
+      <a class="btn btn-secondary" href="/docs">Documentation OpenAPI</a>
+    </div>
+    {commercial_blocks}
+    {dept_section}
     """
     return _layout(
-        "MarchePulse — API & Veille Marches Publics BOAMP",
-        "API REST normalisee et alertes automatisees sur les appels d'offres publics francais (BOAMP + SIREN).",
+        "MarchePulse — API & Open Data Marches Publics BOAMP",
+        "API REST normalisee sur les appels d'offres publics francais (BOAMP + SIREN).",
         body,
     )
 
@@ -216,9 +247,9 @@ def render_tenders_directory_html(
     )
     body = f"""
     <h1>{html.escape(heading)}</h1>
-    <p class="lead">{total} avis en base · Recevez ces appels d'offres automatiquement par Webhook ou Email.</p>
+    <p class="lead">{total} avis en base · Donnees normalisees BOAMP &amp; SIREN.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="/">Activer les alertes gratuites</a>
+      <a class="btn btn-primary" href="/docs">Documentation OpenAPI</a>
       <a class="btn btn-secondary" href="/marches">Tous les departements</a>
     </div>
     <p>{dept_pills}</p>
@@ -247,11 +278,7 @@ def render_tender_detail_html(tender: NormalizedTender, settings: Settings) -> s
         </div>
         """
 
-    checkout_url = (
-        settings.lemonsqueezy_checkout_url
-        or settings.stripe_checkout_url
-        or "/"
-    )
+    cta_url, _ = _primary_api_cta(settings)
     body = f"""
     <p><a href="/marches">&larr; Retour a la liste des marches</a></p>
     <h1>{html.escape(tender.title)}</h1>
@@ -268,7 +295,7 @@ def render_tender_detail_html(tender: NormalizedTender, settings: Settings) -> s
       <p><strong>Descripteurs :</strong> {html.escape(', '.join(tender.descriptors) or '-')}</p>
       <div class="cta-row" style="margin-top:1rem; margin-bottom:0;">
         <a class="btn btn-primary" href="{html.escape(tender.source_url)}" rel="noopener nofollow" target="_blank">Voir l'avis officiel BOAMP</a>
-        <a class="btn btn-secondary" href="{html.escape(checkout_url)}">Recevoir des alertes similaires</a>
+        <a class="btn btn-secondary" href="{html.escape(cta_url)}">Utiliser l'API</a>
       </div>
     </div>
     {buyer_block}
