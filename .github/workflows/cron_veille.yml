@@ -1,0 +1,24 @@
+name: Autonomous Procurement Pipeline
+
+on:
+  schedule:
+    - cron: "15 */6 * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger-or-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trigger remote deployed pipeline if configured
+        env:
+          MP_BASE_URL: ${{ secrets.MP_BASE_URL }}
+          MP_ADMIN_SECRET: ${{ secrets.MP_ADMIN_SECRET }}
+        run: |
+          if [ -n "$MP_BASE_URL" ] && [ -n "$MP_ADMIN_SECRET" ]; then
+            echo "Triggering remote pipeline at $MP_BASE_URL/v1/admin/pipeline"
+            curl -fsS -X POST "$MP_BASE_URL/v1/admin/pipeline" \
+              -H "X-Admin-Secret: $MP_ADMIN_SECRET"
+          else
+            echo "MP_BASE_URL / MP_ADMIN_SECRET secrets not set; skipping remote trigger."
+          fi

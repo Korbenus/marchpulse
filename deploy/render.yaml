@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: marchepulse-api
+    runtime: docker
+    dockerfilePath: ./deploy/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: MP_ENV
+        value: prod
+      - key: MP_LOG_LEVEL
+        value: INFO
+      - key: MP_ADMIN_SECRET
+        generateValue: true
+      - key: MP_BASE_URL
+        sync: false
+      - key: MP_DATABASE_URL
+        sync: false
+      - key: MP_RAPIDAPI_PROXY_SECRET
+        sync: false
+      - key: MP_LEMONSQUEEZY_WEBHOOK_SECRET
+        sync: false
+      - key: MP_LEMONSQUEEZY_CHECKOUT_URL
+        sync: false
+      - key: MP_STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: MP_STRIPE_CHECKOUT_URL
+        sync: false
+      - key: MP_RESEND_API_KEY
+        sync: false
+      - key: MP_EMAIL_FROM
+        value: "MarchePulse <alerts@example.com>"
